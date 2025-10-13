@@ -34,7 +34,7 @@ jobs:
           npm ci || npm install
 
       - name: Build all React apps in src/<name>/*
-        run: build.sh
+        run: ./build.sh
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
