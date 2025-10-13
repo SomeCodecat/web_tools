@@ -1,0 +1,60 @@
+# GitHub Actions workflow to build all React apps in /src/<name>/main.tsx and publish to GitHub Pages
+
+name: Build & Deploy React Apps to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          npm ci || npm install
+
+      - name: Build all React apps in /src/*/main.tsx with template replacements
+        run: |
+          mkdir -p public
+          for d in src/*; do
+            if [ -f "$d/main.tsx" ]; then
+              name=$(basename "$d")
+              mkdir -p "public/$name"
+              npx esbuild "$d/main.tsx" --bundle --outfile="public/$name/bundle.js" --define:process.env.NODE_ENV=\"production\" --minify --jsx=automatic --platform=browser --target=es2017
+              # Prepare HTML from template and config
+              html_template="src/template.html"
+              config_file="$d/config.json"
+              html_out="public/$name/index.html"
+              if [ -f "$config_file" ]; then
+                title=$(jq -r .title "$config_file")
+                desc=$(jq -r .description "$config_file")
+              else
+                title="$name"
+                desc="React app: $name"
+              fi
+              sed -e "s/{{TITLE}}/$title/g" -e "s/{{DESCRIPTION}}/$desc/g" "$html_template" > "$html_out"
+            fi
+          done
+        shell: bash
+        env:
+          PATH: ${{ runner.tool_cache }}/node/20.*/x64/bin:${PATH}
+          # jq is preinstalled on ubuntu-latest
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          force_orphan: true
