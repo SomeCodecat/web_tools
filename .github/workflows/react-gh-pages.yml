@@ -47,9 +47,6 @@ jobs:
             fi
           done
         shell: bash
-        env:
-          PATH: ${{ runner.tool_cache }}/node/20.*/x64/bin:${PATH}
-          # jq is preinstalled on ubuntu-latest
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
