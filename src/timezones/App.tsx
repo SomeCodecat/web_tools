@@ -119,26 +119,29 @@ const TimezoneVisual: React.FC<TimezoneVisualProps> = ({
     const dayEnd = (sunsetMinutes / (24 * 60)) * 100;
     const transition = 4; // Transition width
 
+    const nightColor = "#0a0a16";
+    const dayColor = "#fde047";
+
     if (dayStart <= dayEnd) {
       return {
         background: `linear-gradient(to right, 
-          #1e293b,
-          #1e293b ${dayStart - transition}%, 
-          #fde047 ${dayStart + transition}%, 
-          #fde047 ${dayEnd - transition}%, 
-          #1e293b ${dayEnd + transition}%,
-          #1e293b
+          ${nightColor},
+          ${nightColor} ${dayStart - transition}%, 
+          ${dayColor} ${dayStart + transition}%, 
+          ${dayColor} ${dayEnd - transition}%, 
+          ${nightColor} ${dayEnd + transition}%,
+          ${nightColor}
         )`,
       };
     } else {
       return {
         background: `linear-gradient(to right, 
-          #fde047,
-          #fde047 ${dayEnd - transition}%, 
-          #1e293b ${dayEnd + transition}%, 
-          #1e293b ${dayStart - transition}%, 
-          #fde047 ${dayStart + transition}%,
-          #fde047
+          ${dayColor},
+          ${dayColor} ${dayEnd - transition}%, 
+          ${nightColor} ${dayEnd + transition}%, 
+          ${nightColor} ${dayStart - transition}%, 
+          ${dayColor} ${dayStart + transition}%,
+          ${dayColor}
         )`,
       };
     }
@@ -274,48 +277,56 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
 
     return (
       <div
-        className={`flex items-center justify-between w-full ${panelBg} p-4 rounded-xl gap-6 border-l-4`}
+        className={`flex flex-col md:flex-row items-start md:items-center justify-between w-full ${panelBg} p-4 rounded-xl gap-4 md:gap-6 border-l-4`}
         style={{ borderColor: isOwnPanel ? "#06b6d4" : color }}
       >
-        <div className="w-56 flex-shrink-0">
-          <h2 className="text-xl font-bold text-white truncate">
-            {city.replace(/_/g, " ")}
-          </h2>
-          <p className="text-xs text-gray-400 truncate">
-            {tz.replace(/_/g, " ")}
-          </p>
-          <p className="text-3xl font-mono text-slate-100 mt-1">
-            {cardData.timeString}
-          </p>
-          <p className="text-sm text-gray-300">{cardData.dateString}</p>
+        <div className="w-full md:w-56 flex-shrink-0">
+          <div className="flex justify-between items-start md:block">
+            <div>
+              <h2 className="text-xl font-bold text-white truncate">
+                {city.replace(/_/g, " ")}
+              </h2>
+              <p className="text-xs text-gray-400 truncate">
+                {tz.replace(/_/g, " ")}
+              </p>
+            </div>
+            <div className="text-right md:text-left">
+              <p className="text-3xl font-mono text-slate-100 md:mt-1">
+                {cardData.timeString}
+              </p>
+              <p className="text-sm text-gray-300">{cardData.dateString}</p>
+            </div>
+          </div>
         </div>
 
-        <TimezoneVisual
-          timezone={tz}
-          coords={{ lat, lon }}
-          currentTime={currentTime}
-          color={isOwnPanel ? "#06b6d4" : color}
-        />
+        <div className="w-full md:flex-grow flex items-center justify-center px-0 md:px-4 mb-8 md:mb-0">
+          <TimezoneVisual
+            timezone={tz}
+            coords={{ lat, lon }}
+            currentTime={currentTime}
+            color={isOwnPanel ? "#06b6d4" : color}
+          />
+        </div>
 
-        <div className="w-48 flex-shrink-0 text-right">
+        <div className="w-full md:w-48 flex-shrink-0 text-left md:text-right">
           {isOwnPanel ? (
             <span className="text-lg font-semibold text-cyan-300">
               {cardData.timeZoneName}
             </span>
           ) : (
-            <>
+            <div className="flex justify-between items-center w-full">
               <p className="text-lg font-medium" style={{ color }}>
                 {cardData.offsetString}
               </p>
               {onDelete && (
                 <button
                   onClick={() => onDelete(id)}
-                  className="text-gray-500 hover:text-red-500 font-bold text-sm mt-2 transition-colors"
+                  className="text-gray-500 hover:text-red-500 font-bold text-sm transition-colors"
                 >
                   REMOVE
                 </button>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>
