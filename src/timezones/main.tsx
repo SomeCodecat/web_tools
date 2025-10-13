@@ -488,4 +488,10 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  import("react-dom/client").then(({ createRoot }) => {
+    const root = createRoot(rootElement);
+    root.render(<App />);
+  });
+}
