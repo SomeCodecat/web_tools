@@ -229,16 +229,35 @@ const ResultCard: React.FC<ResultCardProps> = ({
   </div>
 );
 
-const DaylightVisual: React.FC<{ sunTimes: SunCalc.GetTimesResult }> = ({
-  sunTimes,
-}) => {
-  const getPercentage = (time: Date) =>
-    ((time.getHours() * 60 + time.getMinutes()) / (24 * 60)) * 100;
+const DaylightVisual: React.FC<{
+  sunTimes: SunCalc.GetTimesResult & {
+    goldenHourMorningStart?: Date | null;
+    goldenHourMorningEnd?: Date | null;
+    goldenHourEveningStart?: Date | null;
+    goldenHourEveningEnd?: Date | null;
+  };
+}> = ({ sunTimes }) => {
+  // Helper to get percentage of the day for a given time
+  const getPercentage = (time: Date | undefined | null) => {
+    if (!time) return 0;
+    return ((time.getHours() * 60 + time.getMinutes()) / (24 * 60)) * 100;
+  };
 
+  // Use the same golden hour times as the cards
   const sunrisePercent = getPercentage(sunTimes.sunrise);
   const sunsetPercent = getPercentage(sunTimes.sunset);
-  const morningGoldenHourEndPercent = getPercentage(sunTimes.goldenHourEnd);
-  const eveningGoldenHourStartPercent = getPercentage(sunTimes.goldenHour);
+  const morningGoldenHourStartPercent = getPercentage(
+    sunTimes.goldenHourMorningStart
+  );
+  const morningGoldenHourEndPercent = getPercentage(
+    sunTimes.goldenHourMorningEnd
+  );
+  const eveningGoldenHourStartPercent = getPercentage(
+    sunTimes.goldenHourEveningStart
+  );
+  const eveningGoldenHourEndPercent = getPercentage(
+    sunTimes.goldenHourEveningEnd
+  );
 
   const nightColor = "#0F172A";
   const dayColor = "#60A5FA";
@@ -250,35 +269,43 @@ const DaylightVisual: React.FC<{ sunTimes: SunCalc.GetTimesResult }> = ({
         className="relative w-full h-3 rounded-full overflow-hidden"
         style={{
           background: `linear-gradient(to right, 
-                    ${nightColor} 0%, 
-                    ${nightColor} ${sunrisePercent - 2}%, 
-                    ${dayColor} ${sunrisePercent + 2}%, 
-                    ${dayColor} ${sunsetPercent - 2}%, 
-                    ${nightColor} ${sunsetPercent + 2}%, 
-                    ${nightColor} 100%)`,
+            ${nightColor} 0%, 
+            ${nightColor} ${sunrisePercent - 2}%, 
+            ${dayColor} ${sunrisePercent + 2}%, 
+            ${dayColor} ${sunsetPercent - 2}%, 
+            ${nightColor} ${sunsetPercent + 2}%, 
+            ${nightColor} 100%)`,
         }}
       >
         {/* Morning Golden Hour */}
-        <div
-          className="absolute top-0 h-full"
-          style={{
-            left: `${sunrisePercent}%`,
-            width: `${morningGoldenHourEndPercent - sunrisePercent}%`,
-            backgroundColor: goldenHourColor,
-            opacity: 0.8,
-          }}
-        ></div>
+        {morningGoldenHourStartPercent < morningGoldenHourEndPercent && (
+          <div
+            className="absolute top-0 h-full"
+            style={{
+              left: `${morningGoldenHourStartPercent}%`,
+              width: `${
+                morningGoldenHourEndPercent - morningGoldenHourStartPercent
+              }%`,
+              backgroundColor: goldenHourColor,
+              opacity: 0.8,
+            }}
+          ></div>
+        )}
 
         {/* Evening Golden Hour */}
-        <div
-          className="absolute top-0 h-full"
-          style={{
-            left: `${eveningGoldenHourStartPercent}%`,
-            width: `${sunsetPercent - eveningGoldenHourStartPercent}%`,
-            backgroundColor: goldenHourColor,
-            opacity: 0.8,
-          }}
-        ></div>
+        {eveningGoldenHourStartPercent < eveningGoldenHourEndPercent && (
+          <div
+            className="absolute top-0 h-full"
+            style={{
+              left: `${eveningGoldenHourStartPercent}%`,
+              width: `${
+                eveningGoldenHourEndPercent - eveningGoldenHourStartPercent
+              }%`,
+              backgroundColor: goldenHourColor,
+              opacity: 0.8,
+            }}
+          ></div>
+        )}
       </div>
       <div className="flex justify-between text-xs text-slate-400 mt-2 px-1">
         <span>12 AM</span>
@@ -298,6 +325,9 @@ const App: React.FC = () => {
   const [selectedLocation, setSelectedLocation] =
     React.useState<CityInfo | null>(null);
   const [date, setDate] = React.useState<Date>(new Date());
+  const [mode, setMode] = React.useState<"plusminus6" | "suncalc">(
+    "plusminus6"
+  );
   type ExtendedSunTimes = SunCalc.GetTimesResult & {
     goldenHourMorningStart?: Date | null;
     goldenHourMorningEnd?: Date | null;
@@ -409,34 +439,50 @@ const App: React.FC = () => {
     return result || new Date((lo + hi) / 2);
   }
 
-  // Recalculate sun times and golden hour when location or date changes
+  // Recalculate sun times and golden hour when location, date, or mode changes
   React.useEffect(() => {
     if (selectedLocation) {
       const { lat, lon } = selectedLocation.city;
       const times = SunCalc.getTimes(date, lat, lon);
 
-      // Golden hour: sun between -6 and +6 degrees
-      // Morning: -6deg (start), +6deg (end)
-      // Evening: +6deg (start), -6deg (end)
-      const morningStart = getTimeAtAltitude(date, lat, lon, -6, true);
-      const morningEnd = getTimeAtAltitude(date, lat, lon, 6, true);
-      const eveningStart = getTimeAtAltitude(date, lat, lon, 6, false);
-      const eveningEnd = getTimeAtAltitude(date, lat, lon, -6, false);
+      if (mode === "plusminus6") {
+        // Golden hour: sun between -6 and +6 degrees
+        // Morning: -6deg (start), +6deg (end)
+        // Evening: +6deg (start), -6deg (end)
+        const morningStart = getTimeAtAltitude(date, lat, lon, -6, true);
+        const morningEnd = getTimeAtAltitude(date, lat, lon, 6, true);
+        const eveningStart = getTimeAtAltitude(date, lat, lon, 6, false);
+        const eveningEnd = getTimeAtAltitude(date, lat, lon, -6, false);
 
-      setSunTimes({
-        ...times,
-        goldenHourMorningStart: morningStart,
-        goldenHourMorningEnd: morningEnd,
-        goldenHourEveningStart: eveningStart,
-        goldenHourEveningEnd: eveningEnd,
-      } as SunCalc.GetTimesResult & {
-        goldenHourMorningStart: Date | null;
-        goldenHourMorningEnd: Date | null;
-        goldenHourEveningStart: Date | null;
-        goldenHourEveningEnd: Date | null;
-      });
+        setSunTimes({
+          ...times,
+          goldenHourMorningStart: morningStart,
+          goldenHourMorningEnd: morningEnd,
+          goldenHourEveningStart: eveningStart,
+          goldenHourEveningEnd: eveningEnd,
+        } as SunCalc.GetTimesResult & {
+          goldenHourMorningStart: Date | null;
+          goldenHourMorningEnd: Date | null;
+          goldenHourEveningStart: Date | null;
+          goldenHourEveningEnd: Date | null;
+        });
+      } else {
+        // Use SunCalc's built-in goldenHour and goldenHourEnd
+        setSunTimes({
+          ...times,
+          goldenHourMorningStart: times.sunrise, // SunCalc: morning golden hour is from sunrise to goldenHourEnd
+          goldenHourMorningEnd: times.goldenHourEnd,
+          goldenHourEveningStart: times.goldenHour, // SunCalc: evening golden hour is from goldenHour to sunset
+          goldenHourEveningEnd: times.sunset,
+        } as SunCalc.GetTimesResult & {
+          goldenHourMorningStart: Date | null;
+          goldenHourMorningEnd: Date | null;
+          goldenHourEveningStart: Date | null;
+          goldenHourEveningEnd: Date | null;
+        });
+      }
     }
-  }, [selectedLocation, date]);
+  }, [selectedLocation, date, mode]);
 
   const handleLocationSelect = (location: CityInfo) => {
     setSelectedLocation(location);
@@ -492,6 +538,36 @@ const App: React.FC = () => {
             Find the perfect light for your photography.
           </p>
         </header>
+
+        <div className="flex justify-center mb-6">
+          <div className="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2">
+            <span className="text-slate-300 font-medium">
+              Golden Hour Mode:
+            </span>
+            <button
+              className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                mode === "plusminus6"
+                  ? "bg-yellow-500 text-slate-900"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+              }`}
+              onClick={() => setMode("plusminus6")}
+              aria-pressed={mode === "plusminus6"}
+            >
+              ±6°
+            </button>
+            <button
+              className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                mode === "suncalc"
+                  ? "bg-yellow-500 text-slate-900"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+              }`}
+              onClick={() => setMode("suncalc")}
+              aria-pressed={mode === "suncalc"}
+            >
+              SunCalc
+            </button>
+          </div>
+        </div>
 
         <main className="max-w-3xl mx-auto">
           <div className="flex flex-col md:flex-row gap-6 mb-8">
