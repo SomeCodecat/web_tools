@@ -11,6 +11,8 @@ mkdir -p public
 # Let's be specific about what to remove to avoid deleting something important.
 find public -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
 
+./process_cities.sh
+
 for d in src/*/; do
     if [ -f "${d}main.tsx" ]; then
       name=$(basename "$d")
@@ -19,11 +21,11 @@ for d in src/*/; do
       
       # Build CSS files
       if [ -f "${d}index.css" ]; then
-        npx postcss "${d}index.css" -o "public/$name/bundle.css"
+        npx postcss "${d}index.css" -o "public/$name/index.css"
       fi
 
       # Build TypeScript/TSX files
-      npx esbuild "${d}main.tsx" --bundle --outfile="public/$name/bundle.js" --define:process.env.NODE_ENV='"production"' --minify --jsx=automatic --platform=browser --target=es2017
+      npx esbuild "${d}main.tsx" --bundle --outfile="public/$name/bundle.js" --define:process.env.NODE_ENV='"production"' --minify --jsx=automatic --platform=browser --target=es2017 --loader:.png=file
       
       # Copy HTML file
       if [ -f "${d}index.html" ]; then

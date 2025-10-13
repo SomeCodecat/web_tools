@@ -1,50 +1,28 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import SunCalc from "suncalc";
+import { List, RowComponentProps } from "react-window";
 
-// --- Helper Functions & Data ---
-
-// Fallback for environments where Intl.supportedValuesOf is not available
-const ALL_TIMEZONES: string[] =
-  typeof (Intl as any).supportedValuesOf === "function"
-    ? (Intl as any).supportedValuesOf("timeZone")
-    : [
-        "Pacific/Midway",
-        "America/Adak",
-        "Etc/GMT+10",
-        "Pacific/Marquesas",
-        "Pacific/Gambier",
-        "America/Anchorage",
-        "America/Los_Angeles",
-        "America/Denver",
-        "America/Chicago",
-        "America/New_York",
-        "America/Caracas",
-        "America/Santiago",
-        "America/Sao_Paulo",
-        "Atlantic/Azores",
-        "Europe/London",
-        "Europe/Berlin",
-        "Europe/Moscow",
-        "Asia/Dubai",
-        "Asia/Karachi",
-        "Asia/Dhaka",
-        "Asia/Bangkok",
-        "Asia/Hong_Kong",
-        "Asia/Tokyo",
-        "Australia/Sydney",
-        "Pacific/Auckland",
-        // ... (add more as needed)
-      ];
-interface GroupedTimezones {
-  [region: string]: string[];
+// --- Data Interfaces ---
+interface City {
+  name: string;
+  lat: number;
+  lon: number;
 }
 
-const GROUPED_TIMEZONES: GroupedTimezones =
-  ALL_TIMEZONES.reduce<GroupedTimezones>((acc, tz) => {
-    const region = tz.split("/")[0];
-    if (!acc[region]) acc[region] = [];
-    acc[region].push(tz);
-    return acc;
-  }, {});
+interface CitiesByTz {
+  [tz: string]: City[];
+}
+
+interface SelectedTimezone {
+  id: string; // tz + city
+  tz: string;
+  city: string;
+  lat: number;
+  lon: number;
+  name: string; // Add name to match the inferred type
+}
+
+// --- Helper Functions & Data ---
 
 // Generates a consistent, vibrant color from a string
 const generateColor = (str: string): string => {
@@ -59,6 +37,20 @@ const generateColor = (str: string): string => {
 
 const GlobalStyles: React.FC = () => (
   <style>{`
+    /* ... existing styles ... */
+    @keyframes pulse-glow {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 8px var(--glow-color);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 12px var(--glow-color);
+      }
+    }
+    .pulsate {
+      animation: pulse-glow 2s infinite ease-in-out;
+    }
     body {
         font-family: 'Inter', sans-serif;
         background-color: #0a0a0a;
@@ -79,104 +71,156 @@ const GlobalStyles: React.FC = () => (
 
 interface TimezoneVisualProps {
   timezone: string;
+  coords: { lat: number; lon: number };
   currentTime: Date;
   color: string;
 }
 
 const TimezoneVisual: React.FC<TimezoneVisualProps> = ({
   timezone,
+  coords,
   currentTime,
   color,
 }) => {
-  // Memoize timeline style calculations for performance
-  const visualStyle = useMemo(() => {
+  const percentage = useMemo(() => {
     try {
       const timeFormatter = new Intl.DateTimeFormat("en-GB", {
         timeZone: timezone,
         hour: "numeric",
         minute: "numeric",
-        // hourCycle: "h23", // Removed, not in DateTimeFormatOptions
       });
       const [hourStr, minuteStr] = timeFormatter.format(currentTime).split(":");
       const hour = parseInt(hourStr, 10);
       const minute = parseInt(minuteStr, 10);
-
-      const percentage = ((hour * 60 + minute) / (24 * 60)) * 100;
-      const backgroundPositionX = 50 - percentage;
-
-      const nightColor = "#0f172a"; // A deep blue for night
-      const gradient = `linear-gradient(to right, ${nightColor} 0%, ${nightColor} 25%, ${color} 50%, ${color} 65%, ${nightColor} 90%, ${nightColor} 100%)`;
-
-      return {
-        backgroundPositionX: `${backgroundPositionX}%`,
-        backgroundImage: gradient,
-      };
+      const totalMinutes = hour * 60 + minute;
+      return (totalMinutes / (24 * 60)) * 100;
     } catch (e) {
-      // In case of an error, fallback to a neutral position
-      return { backgroundPositionX: "50%" };
+      return 0;
     }
-  }, [currentTime, timezone, color]);
+  }, [currentTime, timezone]);
+
+  const gradientStyle = useMemo(() => {
+    const sunTimes = SunCalc.getTimes(currentTime, coords.lat, coords.lon);
+
+    const getMinutesInTimezone = (date: Date) => {
+      const formatter = new Intl.DateTimeFormat("en-GB", {
+        timeZone: timezone,
+        hour: "numeric",
+        minute: "numeric",
+      });
+      const [hourStr, minuteStr] = formatter.format(date).split(":");
+      return parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10);
+    };
+
+    const sunriseMinutes = getMinutesInTimezone(sunTimes.sunrise);
+    const sunsetMinutes = getMinutesInTimezone(sunTimes.sunset);
+
+    const dayStart = (sunriseMinutes / (24 * 60)) * 100;
+    const dayEnd = (sunsetMinutes / (24 * 60)) * 100;
+    const transition = 4; // Transition width
+
+    if (dayStart <= dayEnd) {
+      return {
+        background: `linear-gradient(to right, 
+          #1e293b,
+          #1e293b ${dayStart - transition}%, 
+          #fde047 ${dayStart + transition}%, 
+          #fde047 ${dayEnd - transition}%, 
+          #1e293b ${dayEnd + transition}%,
+          #1e293b
+        )`,
+      };
+    } else {
+      return {
+        background: `linear-gradient(to right, 
+          #fde047,
+          #fde047 ${dayEnd - transition}%, 
+          #1e293b ${dayEnd + transition}%, 
+          #1e293b ${dayStart - transition}%, 
+          #fde047 ${dayStart + transition}%,
+          #fde047
+        )`,
+      };
+    }
+  }, [timezone, currentTime, coords]);
 
   return (
-    <div className="flex-grow">
-      <div
-        className="h-6 w-full bg-gray-700 rounded-full relative overflow-hidden"
-        style={{
-          backgroundSize: "200% 100%",
-          transition: "background-position-x 1s linear",
-          ...visualStyle,
-        }}
-      >
-        {/* Hour markers */}
-        {Array.from({ length: 24 }).map((_, i) => (
+    <div className="flex-grow flex items-center justify-center px-4">
+      <div className="relative w-full pt-6">
+        <div className="relative w-full h-2 rounded-full" style={gradientStyle}>
           <div
-            key={i}
-            className="absolute top-1/2 -translate-y-1/2 w-px h-1/2 bg-white/20"
-            style={{ left: `${(100 / 24) * i}%` }}
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-gray-900 pulsate"
+            style={
+              {
+                left: `calc(${percentage}% - 8px)`,
+                backgroundColor: color,
+                "--glow-color": color,
+              } as React.CSSProperties
+            }
           ></div>
-        ))}
-        <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 bg-red-500 shadow-lg rounded-full"></div>
+        </div>
+        <div className="absolute top-full mt-1 w-full h-6">
+          {Array.from({ length: 25 }).map((_, i) => {
+            const isLabelHour = i % 6 === 0;
+            return (
+              <div
+                key={i}
+                className="absolute -translate-x-1/2"
+                style={{ left: `${(i / 24) * 100}%` }}
+              >
+                <div
+                  className={`mx-auto w-0.5 ${
+                    isLabelHour ? "h-2 bg-white/40" : "h-1 bg-white/20"
+                  }`}
+                ></div>
+                {isLabelHour && (
+                  <span className="absolute top-full mt-0.5 text-xs text-gray-400 -translate-x-1/2">
+                    {i}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 };
 
 interface TimezoneCardProps {
-  timezone: string;
+  selectedTz: SelectedTimezone;
   isOwnPanel: boolean;
-  ownTimezone?: string;
+  ownTimezone?: SelectedTimezone;
   currentTime: Date;
-  onDelete?: (tz: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
-  ({ timezone, isOwnPanel, ownTimezone, currentTime, onDelete }) => {
-    const color = useMemo(() => generateColor(timezone), [timezone]);
+  ({ selectedTz, isOwnPanel, ownTimezone, currentTime, onDelete }) => {
+    const { tz, city, lat, lon, id } = selectedTz;
+    const color = useMemo(() => generateColor(id), [id]);
 
     const cardData = useMemo(() => {
       try {
         const timeFormatter = new Intl.DateTimeFormat("en-GB", {
-          timeZone: timezone,
+          timeZone: tz,
           hour: "numeric",
           minute: "numeric",
           second: "numeric",
-          // hourCycle: "h23", // Removed, not in DateTimeFormatOptions
         });
         const dateFormatter = new Intl.DateTimeFormat("en-US", {
-          timeZone: timezone,
+          timeZone: tz,
           weekday: "long",
           month: "long",
           day: "numeric",
         });
         const tzAbbrFormatter = new Intl.DateTimeFormat("en-US", {
-          timeZone: timezone,
+          timeZone: tz,
           timeZoneName: "short",
         });
 
         const timeString = timeFormatter.format(currentTime);
         const dateString = dateFormatter.format(currentTime);
-        // Type assertion for formatToParts and find
-        // TypeScript: formatToParts is available in ES2017+, but type may not exist in your config. Use 'any' for the callback param.
         const timeZoneName =
           tzAbbrFormatter
             .formatToParts(currentTime)
@@ -185,10 +229,10 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
         let offsetString = "";
         if (!isOwnPanel && ownTimezone) {
           const ownDate = new Date(
-            currentTime.toLocaleString("en-US", { timeZone: ownTimezone })
+            currentTime.toLocaleString("en-US", { timeZone: ownTimezone.tz })
           );
           const hereDate = new Date(
-            currentTime.toLocaleString("en-US", { timeZone: timezone })
+            currentTime.toLocaleString("en-US", { timeZone: tz })
           );
           const offsetHours =
             (hereDate.getTime() - ownDate.getTime()) / (1000 * 60 * 60);
@@ -196,7 +240,7 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
           if (offsetHours === 0) {
             offsetString = "Same time";
           } else {
-            const roundedOffset = Math.round(offsetHours * 2) / 2; // Round to nearest 0.5
+            const roundedOffset = Math.round(offsetHours * 2) / 2;
             offsetString = `${Math.abs(roundedOffset)}h ${
               roundedOffset >= 0 ? "ahead" : "behind"
             }`;
@@ -211,16 +255,16 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
           error: null,
         };
       } catch (error) {
-        console.error(`Could not update time for ${timezone}:`, error);
+        console.error(`Could not update time for ${tz}:`, error);
         return { error: "Invalid Timezone" };
       }
-    }, [currentTime, timezone, isOwnPanel, ownTimezone]);
+    }, [currentTime, tz, isOwnPanel, ownTimezone]);
 
     if (cardData.error) {
       return (
         <div className="flex items-center justify-between w-full bg-red-900 p-4 rounded-xl gap-6">
           <p>
-            {cardData.error}: {timezone}
+            {cardData.error}: {tz}
           </p>
         </div>
       );
@@ -233,13 +277,12 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
         className={`flex items-center justify-between w-full ${panelBg} p-4 rounded-xl gap-6 border-l-4`}
         style={{ borderColor: isOwnPanel ? "#06b6d4" : color }}
       >
-        {/* Left: Info */}
         <div className="w-56 flex-shrink-0">
           <h2 className="text-xl font-bold text-white truncate">
-            {timezone.replace(/_/g, " ").split("/").pop()}
+            {city.replace(/_/g, " ")}
           </h2>
           <p className="text-xs text-gray-400 truncate">
-            {timezone.replace(/_/g, " ")}
+            {tz.replace(/_/g, " ")}
           </p>
           <p className="text-3xl font-mono text-slate-100 mt-1">
             {cardData.timeString}
@@ -247,15 +290,14 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
           <p className="text-sm text-gray-300">{cardData.dateString}</p>
         </div>
 
-        {/* Middle: Timeline */}
         <TimezoneVisual
-          timezone={timezone}
+          timezone={tz}
+          coords={{ lat, lon }}
           currentTime={currentTime}
-          color={isOwnPanel ? "#67e8f9" : color}
+          color={isOwnPanel ? "#06b6d4" : color}
         />
 
-        {/* Right: Offset & Controls */}
-        <div className="w-32 flex-shrink-0 text-right">
+        <div className="w-48 flex-shrink-0 text-right">
           {isOwnPanel ? (
             <span className="text-lg font-semibold text-cyan-300">
               {cardData.timeZoneName}
@@ -267,7 +309,7 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
               </p>
               {onDelete && (
                 <button
-                  onClick={() => onDelete(timezone)}
+                  onClick={() => onDelete(id)}
                   className="text-gray-500 hover:text-red-500 font-bold text-sm mt-2 transition-colors"
                 >
                   REMOVE
@@ -284,26 +326,46 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
 interface TimezoneSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (tz: string) => void;
-  existingTimezones: string[];
+  onSelect: (tz: string, city: City) => void;
+  existingTimezoneIds: string[];
+  citiesByTz: CitiesByTz | null;
 }
 
 const TimezoneSelectionModal: React.FC<TimezoneSelectionModalProps> = ({
   isOpen,
   onClose,
   onSelect,
-  existingTimezones,
+  existingTimezoneIds,
+  citiesByTz,
 }) => {
-  // ... (This component remains the same)
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredTimezones = useMemo(() => {
-    if (!searchTerm) return ALL_TIMEZONES;
-    const lowerCaseSearch = searchTerm.toLowerCase().replace(/_/g, " ");
-    return ALL_TIMEZONES.filter((tz: string) =>
-      tz.toLowerCase().replace(/_/g, " ").includes(lowerCaseSearch)
+  const allCities = useMemo(() => {
+    if (!citiesByTz) return [];
+    return Object.entries(citiesByTz).flatMap(([tz, cities]) =>
+      cities.map((city) => ({ tz, city }))
     );
-  }, [searchTerm]);
+  }, [citiesByTz]);
+
+  const filteredCities = useMemo(() => {
+    if (!searchTerm) return allCities;
+    const lowerCaseSearch = searchTerm.toLowerCase();
+    const cityMatches: { tz: string; city: City }[] = [];
+    const tzMatches: { tz: string; city: City }[] = [];
+
+    allCities.forEach(({ tz, city }) => {
+      const cityNameLower = city.name.toLowerCase();
+      const tzLower = tz.toLowerCase().replace(/_/g, " ");
+
+      if (cityNameLower.includes(lowerCaseSearch)) {
+        cityMatches.push({ tz, city });
+      } else if (tzLower.includes(lowerCaseSearch)) {
+        tzMatches.push({ tz, city });
+      }
+    });
+
+    return [...cityMatches, ...tzMatches];
+  }, [allCities, searchTerm]);
 
   useEffect(() => {
     if (isOpen) {
@@ -313,17 +375,45 @@ const TimezoneSelectionModal: React.FC<TimezoneSelectionModalProps> = ({
 
   if (!isOpen) return null;
 
+  const Row = ({ index, style }: RowComponentProps<{}>) => {
+    const { tz, city } = filteredCities[index];
+    const id = `${tz}:${city.name}`;
+    const isSelected = existingTimezoneIds.includes(id);
+    return (
+      <div
+        style={style}
+        className="flex items-center justify-between p-3 border-b border-gray-700"
+      >
+        <div>
+          <p className="font-bold text-white">{city.name}</p>
+          <p className="text-sm text-gray-400">{tz.replace(/_/g, " ")}</p>
+        </div>
+        <button
+          onClick={() => onSelect(tz, city)}
+          disabled={isSelected}
+          className={`text-white font-bold py-1 px-3 rounded text-sm ${
+            isSelected
+              ? "bg-gray-500 cursor-not-allowed"
+              : "bg-cyan-600 hover:bg-cyan-700"
+          }`}
+        >
+          {isSelected ? "Selected" : "Add"}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div
       className="modal fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md flex flex-col"
+        className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Select a Timezone</h2>
+          <h2 className="text-2xl font-bold">Select a City</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white text-3xl leading-none"
@@ -333,33 +423,136 @@ const TimezoneSelectionModal: React.FC<TimezoneSelectionModalProps> = ({
         </div>
         <input
           type="search"
-          placeholder="Search for a city or region..."
+          placeholder="Search for a city or timezone..."
           className="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500 focus:outline-none mb-4"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           autoFocus
         />
-        <div
-          id="timezoneListContainer"
-          className="max-h-[60vh] overflow-y-auto"
-        >
-          <ul id="timezoneList">
-            {filteredTimezones.map((tz: string) => (
-              <li
-                key={tz}
-                onClick={() => !existingTimezones.includes(tz) && onSelect(tz)}
-                className={`p-3 rounded-lg transition-colors ${
-                  existingTimezones.includes(tz)
-                    ? "opacity-50 cursor-not-allowed"
-                    : "cursor-pointer hover:bg-gray-700"
-                }`}
-              >
-                {tz.replace(/_/g, " ")}
-              </li>
-            ))}
-          </ul>
+        <div className="min-h-0 max-h-full flex-grow">
+          <List
+            rowComponent={Row}
+            rowCount={filteredCities.length}
+            rowHeight={65}
+            rowProps={{}}
+          />
         </div>
       </div>
+    </div>
+  );
+};
+
+// --- Searchable Select Component ---
+interface SearchableSelectProps {
+  options: { tz: string; city: City }[];
+  value: SelectedTimezone;
+  onChange: (tz: string, city: City) => void;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  options,
+  value,
+  onChange,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) return options;
+    const lowerCaseSearch = searchTerm.toLowerCase();
+    const cityMatches: { tz: string; city: City }[] = [];
+    const tzMatches: { tz: string; city: City }[] = [];
+
+    options.forEach(({ tz, city }) => {
+      const cityNameLower = city.name.toLowerCase();
+      const tzLower = tz.toLowerCase().replace(/_/g, " ");
+
+      if (cityNameLower.includes(lowerCaseSearch)) {
+        cityMatches.push({ tz, city });
+      } else if (tzLower.includes(lowerCaseSearch)) {
+        tzMatches.push({ tz, city });
+      }
+    });
+
+    return [...cityMatches, ...tzMatches];
+  }, [options, searchTerm]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [wrapperRef]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSearchTerm("");
+    }
+  }, [isOpen]);
+
+  const Row = ({ index, style }: RowComponentProps) => {
+    const { tz, city } = filteredOptions[index];
+    return (
+      <div
+        style={style}
+        className="flex items-center justify-between p-3 hover:bg-gray-600 cursor-pointer"
+        onClick={() => {
+          onChange(tz, city);
+          setIsOpen(false);
+        }}
+      >
+        <div>
+          <p className="font-bold text-white">{city.name}</p>
+          <p className="text-sm text-gray-400">{tz.replace(/_/g, " ")}</p>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <button
+        type="button"
+        className="w-full p-3 rounded-lg text-white custom-select focus:ring-2 focus:ring-cyan-500 focus:outline-none mt-2 mb-4 text-left"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className="font-bold">{value.city.replace(/_/g, " ")}</span>
+        <span className="text-gray-400 ml-2">
+          ({value.tz.replace(/_/g, " ")})
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-10 w-full bg-gray-800 rounded-lg shadow-xl mt-1 border border-gray-700 max-h-96 flex flex-col">
+          <div className="p-2">
+            <input
+              type="search"
+              placeholder="Search for a city or timezone..."
+              className="w-full p-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className={`min-h-0 max-h-300 h-300 flex-grow overflow-y-auto`}>
+            <List
+              rowComponent={Row}
+              rowCount={filteredOptions.length}
+              rowHeight={65}
+              rowProps={{}}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -367,36 +560,139 @@ const TimezoneSelectionModal: React.FC<TimezoneSelectionModalProps> = ({
 // --- Main App Component ---
 
 const App: React.FC = () => {
-  const [ownTimezone, setOwnTimezone] = useState(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch (e) {
-      return "America/New_York";
-    }
-  });
-  const [comparisonTimezones, setComparisonTimezones] = useState([
-    "Europe/London",
-    "Asia/Tokyo",
-    "America/Los_Angeles",
-  ]);
+  const [citiesByTz, setCitiesByTz] = useState<CitiesByTz | null>(null);
+  const [ownTimezone, setOwnTimezone] = useState<SelectedTimezone | null>(null);
+  const [comparisonTimezones, setComparisonTimezones] = useState<
+    SelectedTimezone[]
+  >([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const allCities = useMemo(() => {
+    if (!citiesByTz) return [];
+    return Object.entries(citiesByTz).flatMap(([tz, cities]) =>
+      cities.map((city) => ({ tz, city }))
+    );
+  }, [citiesByTz]);
+
+  useEffect(() => {
+    fetch("/cities.json")
+      .then((res) => res.json())
+      .then((data: CitiesByTz) => {
+        setCitiesByTz(data);
+
+        // Load saved timezones from local storage
+        const savedOwnTimezoneId = localStorage.getItem("ownTimezoneId");
+        if (savedOwnTimezoneId) {
+          const [tz, ...cityParts] = savedOwnTimezoneId.split(":");
+          const cityName = cityParts.join(":");
+          const city = data[tz]?.find((c) => c.name === cityName);
+          if (city) {
+            setOwnTimezone({
+              id: savedOwnTimezoneId,
+              tz,
+              city: cityName,
+              ...city,
+            });
+          }
+        } else {
+          // Set initial own timezone if not in local storage
+          const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const citiesInTz = data[detectedTz];
+          if (citiesInTz && citiesInTz.length > 0) {
+            const mainCity = citiesInTz[0];
+            setOwnTimezone({
+              id: `${detectedTz}:${mainCity.name}`,
+              tz: detectedTz,
+              city: mainCity.name,
+              ...mainCity,
+            });
+          } else {
+            // Fallback
+            const fallbackTz = "America/New_York";
+            const fallbackCity = data[fallbackTz][0];
+            setOwnTimezone({
+              id: `${fallbackTz}:${fallbackCity.name}`,
+              tz: fallbackTz,
+              city: fallbackCity.name,
+              ...fallbackCity,
+            });
+          }
+        }
+
+        const savedComparisonTimezoneIds = localStorage.getItem(
+          "comparisonTimezoneIds"
+        );
+        if (savedComparisonTimezoneIds) {
+          const ids = JSON.parse(savedComparisonTimezoneIds);
+          const timezones = ids
+            .map((id: string) => {
+              const [tz, ...cityParts] = id.split(":");
+              const cityName = cityParts.join(":");
+              const city = data[tz]?.find((c) => c.name === cityName);
+              if (!city) return null;
+              return { id, tz, city: cityName, ...city };
+            })
+            .filter(
+              (tz: SelectedTimezone | null): tz is SelectedTimezone =>
+                tz !== null
+            );
+          setComparisonTimezones(timezones);
+        }
+      })
+      .catch((err) => console.error("Failed to load cities.json", err));
+  }, []);
+
+  useEffect(() => {
+    if (ownTimezone) {
+      localStorage.setItem("ownTimezoneId", ownTimezone.id);
+    }
+  }, [ownTimezone]);
+
+  useEffect(() => {
+    const ids = comparisonTimezones.map((tz) => tz.id);
+    localStorage.setItem("comparisonTimezoneIds", JSON.stringify(ids));
+  }, [comparisonTimezones]);
 
   useEffect(() => {
     const timerId = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timerId);
   }, []);
 
-  const handleSelectTimezone = (tz: string) => {
-    if (!comparisonTimezones.includes(tz) && ownTimezone !== tz) {
-      setComparisonTimezones((prev) => [...prev, tz].sort());
+  const handleSelectTimezone = (tz: string, city: City) => {
+    const newTz: SelectedTimezone = {
+      id: `${tz}:${city.name}`,
+      tz,
+      city: city.name,
+      ...city,
+    };
+    if (
+      ownTimezone?.id === newTz.id ||
+      comparisonTimezones.some((ctz) => ctz.id === newTz.id)
+    ) {
+      return; // Already exists
     }
+    setComparisonTimezones((prev) =>
+      [...prev, newTz].sort((a, b) => a.id.localeCompare(b.id))
+    );
     setIsModalOpen(false);
   };
 
-  const handleDeleteTimezone = (tzToRemove: string) => {
-    setComparisonTimezones((prev) => prev.filter((tz) => tz !== tzToRemove));
+  const handleDeleteTimezone = (idToRemove: string) => {
+    setComparisonTimezones((prev) => prev.filter((tz) => tz.id !== idToRemove));
   };
+
+  const handleOwnTimezoneChange = (tz: string, cityName: string) => {
+    if (!citiesByTz) return;
+    const city = citiesByTz[tz]?.find((c) => c.name === cityName);
+    if (city) {
+      setOwnTimezone({ id: `${tz}:${cityName}`, tz, city: cityName, ...city });
+    }
+  };
+
+  if (!ownTimezone) {
+    return <div className="text-white text-center p-10">Loading...</div>;
+  }
 
   return (
     <>
@@ -407,7 +703,7 @@ const App: React.FC = () => {
             Timezone Comparison Tool
           </h1>
           <p className="text-lg text-gray-400">
-            Select your primary timezone and compare it with others.
+            Select your primary city and compare its time with others.
           </p>
         </header>
 
@@ -417,29 +713,16 @@ const App: React.FC = () => {
               htmlFor="ownTimezone"
               className="text-lg font-medium text-gray-300"
             >
-              Your Timezone
+              Your City
             </label>
-            <select
-              id="ownTimezone"
-              className="w-full p-3 rounded-lg text-white custom-select focus:ring-2 focus:ring-cyan-500 focus:outline-none mt-2 mb-4"
+            <SearchableSelect
+              options={allCities}
               value={ownTimezone}
-              onChange={(e) => setOwnTimezone(e.target.value)}
-            >
-              {Object.keys(GROUPED_TIMEZONES)
-                .sort()
-                .map((region) => (
-                  <optgroup label={region} key={region}>
-                    {GROUPED_TIMEZONES[region].sort().map((tz: string) => (
-                      <option key={tz} value={tz}>
-                        {tz.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-            </select>
+              onChange={(tz, city) => handleOwnTimezoneChange(tz, city.name)}
+            />
             <div className="space-y-4">
               <TimezoneCard
-                timezone={ownTimezone}
+                selectedTz={ownTimezone}
                 isOwnPanel={true}
                 currentTime={currentTime}
               />
@@ -453,16 +736,16 @@ const App: React.FC = () => {
                 onClick={() => setIsModalOpen(true)}
                 className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
               >
-                Add Timezone
+                Add City
               </button>
             </div>
             <div className="space-y-4">
               {comparisonTimezones
-                .filter((tz) => tz !== ownTimezone)
+                .filter((tz) => tz.id !== ownTimezone.id)
                 .map((tz) => (
                   <TimezoneCard
-                    key={tz}
-                    timezone={tz}
+                    key={tz.id}
+                    selectedTz={tz}
                     isOwnPanel={false}
                     ownTimezone={ownTimezone}
                     currentTime={currentTime}
@@ -477,7 +760,11 @@ const App: React.FC = () => {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSelect={handleSelectTimezone}
-          existingTimezones={[ownTimezone, ...comparisonTimezones]}
+          existingTimezoneIds={[
+            ownTimezone.id,
+            ...comparisonTimezones.map((tz) => tz.id),
+          ]}
+          citiesByTz={citiesByTz}
         />
       </div>
     </>
