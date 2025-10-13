@@ -56,6 +56,9 @@ const GlobalStyles: React.FC = () => (
         background-color: #0a0a0a;
         background-image: radial-gradient(circle at top, #1a1a1a 0%, #0a0a0a 40%);
     }
+    #root {
+      min-height: 100svh;
+    }
     .custom-select {
         background-color: #1f2937;
         border-color: #4b5563;
