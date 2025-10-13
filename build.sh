@@ -4,6 +4,9 @@ set -e # exit on error
 
 # This script builds all React apps found in src/*/main.tsx
 
+# Ensure the public directory exists
+mkdir -p public
+
 # Clean the public directory before building, except for the root index.html and assets if any.
 # Let's be specific about what to remove to avoid deleting something important.
 find public -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
