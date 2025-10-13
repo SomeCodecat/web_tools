@@ -587,7 +587,7 @@ const App: React.FC = () => {
   }, [citiesByTz]);
 
   useEffect(() => {
-    fetch("/cities.json")
+    fetch("../cities.json")
       .then((res) => res.json())
       .then((data: CitiesByTz) => {
         setCitiesByTz(data);
