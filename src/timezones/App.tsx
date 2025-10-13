@@ -578,6 +578,7 @@ const App: React.FC = () => {
   >([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [citiesLoaded, setCitiesLoaded] = useState(false);
 
   const allCities = useMemo(() => {
     if (!citiesByTz) return [];
@@ -650,20 +651,26 @@ const App: React.FC = () => {
             );
           setComparisonTimezones(timezones);
         }
+
+        setTimeout(() => {
+          setCitiesLoaded(true);
+        }, 0);
       })
       .catch((err) => console.error("Failed to load cities.json", err));
   }, []);
 
   useEffect(() => {
+    if (!citiesLoaded) return;
     if (ownTimezone) {
       localStorage.setItem("ownTimezoneId", ownTimezone.id);
     }
-  }, [ownTimezone]);
+  }, [ownTimezone, citiesLoaded]);
 
   useEffect(() => {
+    if (!citiesLoaded) return;
     const ids = comparisonTimezones.map((tz) => tz.id);
     localStorage.setItem("comparisonTimezoneIds", JSON.stringify(ids));
-  }, [comparisonTimezones]);
+  }, [comparisonTimezones, citiesLoaded]);
 
   useEffect(() => {
     const timerId = setInterval(() => setCurrentTime(new Date()), 1000);
