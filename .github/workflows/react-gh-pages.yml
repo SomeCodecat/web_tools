@@ -33,29 +33,8 @@ jobs:
         run: |
           npm ci || npm install
 
-      - name: Build all React apps in /src/*/main.tsx with template replacements
-        run: |
-          mkdir -p public
-          for d in src/*; do
-            if [ -f "$d/main.tsx" ]; then
-              name=$(basename "$d")
-              mkdir -p "public/$name"
-              npx esbuild "$d/main.tsx" --bundle --outfile="public/$name/bundle.js" --define:process.env.NODE_ENV=\"production\" --minify --jsx=automatic --platform=browser --target=es2017
-              # Prepare HTML from template and config
-              html_template="src/template.html"
-              config_file="$d/config.json"
-              html_out="public/$name/index.html"
-              if [ -f "$config_file" ]; then
-                title=$(jq -r .title "$config_file")
-                desc=$(jq -r .description "$config_file")
-              else
-                title="$name"
-                desc="React app: $name"
-              fi
-              sed -e "s/{{TITLE}}/$title/g" -e "s/{{DESCRIPTION}}/$desc/g" "$html_template" > "$html_out"
-            fi
-          done
-        shell: bash
+      - name: Build all React apps in src/<name>/*
+        run: build.sh
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
