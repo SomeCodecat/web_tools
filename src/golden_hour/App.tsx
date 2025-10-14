@@ -14,6 +14,13 @@ interface CityInfo {
   city: City;
 }
 
+type ExtendedSunTimes = SunCalc.GetTimesResult & {
+  goldenHourMorningStart?: Date | null;
+  goldenHourMorningEnd?: Date | null;
+  goldenHourEveningStart?: Date | null;
+  goldenHourEveningEnd?: Date | null;
+};
+
 // Use SunCalc.GetTimesResult for sunTimes type
 
 // --- Helper: Debounce Hook ---
@@ -207,6 +214,7 @@ interface ResultCardProps {
   time: string;
   icon: string;
   period: string;
+  countdown?: string;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -215,6 +223,7 @@ const ResultCard: React.FC<ResultCardProps> = ({
   time,
   icon,
   period,
+  countdown,
   className,
   style,
 }) => (
@@ -225,6 +234,7 @@ const ResultCard: React.FC<ResultCardProps> = ({
     <div className="text-4xl mb-2">{icon}</div>
     <h3 className="text-lg font-bold text-slate-300">{title}</h3>
     <p className="text-2xl font-mono font-bold">{time}</p>
+    {countdown && <p className="text-xs text-slate-500 mt-1">{countdown}</p>}
     <p className="text-sm text-slate-400">{period}</p>
   </div>
 );
@@ -318,6 +328,204 @@ const DaylightVisual: React.FC<{
   );
 };
 
+// --- Helper Functions ---
+
+const calculateCountdown = (targetTime: Date | null | undefined): string => {
+  if (!targetTime) return "";
+
+  const now = new Date();
+  const timeDiff = targetTime.getTime() - now.getTime();
+
+  if (timeDiff <= 0) {
+    // Time has passed, check if it's from today
+    const targetDate = new Date(targetTime);
+    const today = new Date();
+
+    // Check if target time is from today (same year, month, and day)
+    const isToday =
+      targetDate.getFullYear() === today.getFullYear() &&
+      targetDate.getMonth() === today.getMonth() &&
+      targetDate.getDate() === today.getDate();
+
+    if (!isToday) {
+      // Don't show "hours ago" for previous days
+      return "";
+    }
+
+    // Show how long ago (only for today)
+    const timeSince = Math.abs(timeDiff);
+    const hours = Math.floor(timeSince / (1000 * 60 * 60));
+    const minutes = Math.floor((timeSince % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 0) {
+      return `(${hours}:${minutes.toString().padStart(2, "0")} hours ago)`;
+    } else {
+      return `(${minutes} minutes ago)`;
+    }
+  }
+
+  // Time is in the future, show countdown
+  const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+  const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (hours > 0) {
+    return `(in ${hours}:${minutes.toString().padStart(2, "0")} hours)`;
+  } else {
+    return `(in ${minutes} minutes)`;
+  }
+};
+
+const getCurrentGoldenHour = (
+  sunTimes: ExtendedSunTimes
+): {
+  isActive: boolean;
+  type: "morning" | "evening" | null;
+  start: Date | null;
+  end: Date | null;
+} => {
+  const now = new Date();
+  const today = new Date();
+
+  // Check if we're viewing today
+  const viewingToday =
+    sunTimes.sunrise &&
+    sunTimes.sunrise.getFullYear() === today.getFullYear() &&
+    sunTimes.sunrise.getMonth() === today.getMonth() &&
+    sunTimes.sunrise.getDate() === today.getDate();
+
+  if (!viewingToday) {
+    return { isActive: false, type: null, start: null, end: null };
+  }
+
+  // Check morning golden hour
+  if (sunTimes.goldenHourMorningStart && sunTimes.goldenHourMorningEnd) {
+    if (
+      now >= sunTimes.goldenHourMorningStart &&
+      now <= sunTimes.goldenHourMorningEnd
+    ) {
+      return {
+        isActive: true,
+        type: "morning",
+        start: sunTimes.goldenHourMorningStart,
+        end: sunTimes.goldenHourMorningEnd,
+      };
+    }
+  }
+
+  // Check evening golden hour
+  if (sunTimes.goldenHourEveningStart && sunTimes.goldenHourEveningEnd) {
+    if (
+      now >= sunTimes.goldenHourEveningStart &&
+      now <= sunTimes.goldenHourEveningEnd
+    ) {
+      return {
+        isActive: true,
+        type: "evening",
+        start: sunTimes.goldenHourEveningStart,
+        end: sunTimes.goldenHourEveningEnd,
+      };
+    }
+  }
+
+  return { isActive: false, type: null, start: null, end: null };
+};
+
+const GoldenHourBanner: React.FC<{
+  sunTimes: ExtendedSunTimes;
+  showTest?: boolean;
+}> = ({ sunTimes, showTest = false }) => {
+  const currentGoldenHour = getCurrentGoldenHour(sunTimes);
+
+  // Show test banner or actual active golden hour
+  if (!currentGoldenHour.isActive && !showTest) return null;
+
+  // Use test data if showing test banner
+  const bannerData = showTest
+    ? {
+        type: "morning" as const,
+        start: new Date(new Date().setHours(7, 30, 0, 0)),
+        end: new Date(new Date().setHours(8, 30, 0, 0)),
+      }
+    : {
+        type: currentGoldenHour.type!,
+        start: currentGoldenHour.start!,
+        end: currentGoldenHour.end!,
+      };
+
+  const formatTime = (d: Date) =>
+    d.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+  // Calculate remaining time
+  const calculateRemainingTime = (endTime: Date) => {
+    const now = new Date();
+    const timeDiff = endTime.getTime() - now.getTime();
+
+    if (timeDiff <= 0) return "0 minutes left";
+
+    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")} hours left`;
+    } else {
+      return `${minutes} minutes left`;
+    }
+  };
+
+  const remainingTime = showTest
+    ? "35 minutes left" // Test mode shows fixed time
+    : calculateRemainingTime(bannerData.end);
+
+  return (
+    <div className="mb-6 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-xl fade-in">
+      <div className="flex items-center justify-center gap-3">
+        <span className="text-2xl">
+          {bannerData.type === "morning" ? "🌅" : "🌇"}
+        </span>
+        <div className="text-center">
+          <p className="text-yellow-400 font-bold text-lg">
+            {bannerData.type === "morning" ? "Morning" : "Evening"} Golden Hour
+            is Active! {showTest && "(Test Mode)"}
+          </p>
+          <p className="text-slate-300 text-sm">
+            Started at {formatTime(bannerData.start)} • Ends at{" "}
+            {formatTime(bannerData.end)}
+          </p>
+          <p className="text-yellow-300 font-semibold text-sm mt-1">
+            ({remainingTime})
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Helper Functions for LocalStorage ---
+
+const STORAGE_KEY = "golden-hour-last-city";
+
+const saveLastCity = (cityInfo: CityInfo) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cityInfo));
+  } catch (error) {
+    console.warn("Failed to save city to localStorage:", error);
+  }
+};
+
+const getLastCity = (): CityInfo | null => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch (error) {
+    console.warn("Failed to load city from localStorage:", error);
+    return null;
+  }
+};
+
 // --- Main App Component ---
 
 const App: React.FC = () => {
@@ -328,15 +536,20 @@ const App: React.FC = () => {
   const [mode, setMode] = React.useState<"plusminus6" | "suncalc">(
     "plusminus6"
   );
-  type ExtendedSunTimes = SunCalc.GetTimesResult & {
-    goldenHourMorningStart?: Date | null;
-    goldenHourMorningEnd?: Date | null;
-    goldenHourEveningStart?: Date | null;
-    goldenHourEveningEnd?: Date | null;
-  };
   const [sunTimes, setSunTimes] = React.useState<ExtendedSunTimes | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [currentTime, setCurrentTime] = React.useState(new Date());
+  const [showTestBanner, setShowTestBanner] = React.useState<boolean>(false);
+
+  // Update current time every minute for countdown
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch and process city data on initial load
   React.useEffect(() => {
@@ -354,6 +567,21 @@ const App: React.FC = () => {
               : []
         );
         setCities(allCities);
+
+        // Try to restore last saved city
+        const lastCity = getLastCity();
+        if (lastCity) {
+          // Find the city in the loaded cities to ensure it still exists
+          const foundCity = allCities.find(
+            (cityInfo) =>
+              cityInfo.city.name === lastCity.city.name &&
+              cityInfo.tz === lastCity.tz
+          );
+          if (foundCity) {
+            setSelectedLocation(foundCity);
+          }
+        }
+
         setIsLoading(false);
       })
       .catch((err) => {
@@ -486,6 +714,7 @@ const App: React.FC = () => {
 
   const handleLocationSelect = (location: CityInfo) => {
     setSelectedLocation(location);
+    saveLastCity(location);
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -570,10 +799,10 @@ const App: React.FC = () => {
         </div>
 
         <main className="max-w-3xl mx-auto">
-          <div className="flex flex-col md:flex-row gap-6 mb-8">
+          <div className="flex flex-col md:flex-row gap-6 mb-8 md:items-end">
             {/* Location Selector (left) */}
-            <div className="flex-1 flex flex-col justify-end">
-              <label className="text-xs font-medium text-slate-400 mb-1 ml-1">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-slate-400 mb-1 ml-1 block">
                 Location
               </label>
               <div className="relative">
@@ -606,6 +835,7 @@ const App: React.FC = () => {
                           });
                           if (closestCity) {
                             setSelectedLocation(closestCity);
+                            saveLastCity(closestCity);
                           } else {
                             alert("No city found near your location.");
                           }
@@ -649,12 +879,23 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </div>
+              {/* Invisible spacer to match the Today button space */}
+              <div
+                className={`mt-2 ${
+                  selectedLocation &&
+                  date.toDateString() !== new Date().toDateString()
+                    ? "h-8"
+                    : "h-0"
+                }`}
+              >
+                {/* This empty div maintains consistent spacing with Today button */}
+              </div>
             </div>
             {/* Date Selector (right) */}
-            <div className="flex-1 flex flex-col justify-end">
+            <div className="flex-1">
               <label
                 htmlFor="date-picker"
-                className="text-xs font-medium text-slate-400 mb-1 ml-1"
+                className="text-xs font-medium text-slate-400 mb-1 ml-1 block"
               >
                 Date
               </label>
@@ -741,6 +982,27 @@ const App: React.FC = () => {
                   disabled={!selectedLocation}
                 />
               </div>
+              {/* Today button container - conditional height */}
+              <div
+                className={`mt-2 flex items-center ${
+                  selectedLocation &&
+                  date.toDateString() !== new Date().toDateString()
+                    ? "h-8"
+                    : "h-0"
+                }`}
+              >
+                {selectedLocation &&
+                  date.toDateString() !== new Date().toDateString() && (
+                    <button
+                      type="button"
+                      className="w-full px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      onClick={() => setDate(new Date())}
+                      title="Go to today"
+                    >
+                      Today
+                    </button>
+                  )}
+              </div>
             </div>
           </div>
 
@@ -766,12 +1028,15 @@ const App: React.FC = () => {
                 </p>
               </div>
 
+              <GoldenHourBanner sunTimes={sunTimes} showTest={showTestBanner} />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ResultCard
                   icon="🌅"
                   title="Sunrise"
                   time={formatTime(sunTimes.sunrise)}
                   period="Beginning of light"
+                  countdown={calculateCountdown(sunTimes.sunrise)}
                   className="highlight-gold"
                   style={{ animationDelay: "0.1s" }}
                 />
@@ -780,6 +1045,7 @@ const App: React.FC = () => {
                   title="Sunset"
                   time={formatTime(sunTimes.sunset)}
                   period="End of light"
+                  countdown={calculateCountdown(sunTimes.sunset)}
                   className="highlight-blue"
                   style={{ animationDelay: "0.2s" }}
                 />
@@ -794,6 +1060,9 @@ const App: React.FC = () => {
                       undefined
                   )}`}
                   period="Warm, soft light (sun -6° to +6°)"
+                  countdown={calculateCountdown(
+                    (sunTimes as ExtendedSunTimes).goldenHourMorningStart
+                  )}
                   className="highlight-gold"
                   style={{ animationDelay: "0.3s" }}
                 />
@@ -808,6 +1077,9 @@ const App: React.FC = () => {
                       undefined
                   )}`}
                   period="Rich, directional light (sun +6° to -6°)"
+                  countdown={calculateCountdown(
+                    (sunTimes as ExtendedSunTimes).goldenHourEveningStart
+                  )}
                   className="highlight-gold"
                   style={{ animationDelay: "0.4s" }}
                 />
@@ -818,7 +1090,20 @@ const App: React.FC = () => {
           )}
         </main>
         <footer className="text-center mt-12 text-slate-500 text-sm">
-          <p>Powered by SunCalc.js</p>
+          <div className="flex items-center justify-center gap-4">
+            <p>Powered by SunCalc.js</p>
+            {/* Dev Mode Button - Dev only (enable by adding ?dev=1 to URL) */}
+            {(new URLSearchParams(window.location.search).get("dev") === "1" ||
+              window.location.hostname === "localhost") && (
+              <button
+                className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-400 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                onClick={() => setShowTestBanner(!showTestBanner)}
+                title="Toggle test banner for development"
+              >
+                Dev Mode
+              </button>
+            )}
+          </div>
         </footer>
       </div>
     </>
