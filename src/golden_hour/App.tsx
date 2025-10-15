@@ -571,6 +571,67 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Update favicon based on next golden hour
+  React.useEffect(() => {
+    const updateFavicon = (icon: string) => {
+      const existingLink = document.querySelector(
+        'link[rel="icon"]'
+      ) as HTMLLinkElement;
+      const svgUrl = `data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>${encodeURIComponent(
+        icon
+      )}</text></svg>`;
+
+      if (existingLink) {
+        existingLink.href = svgUrl;
+      } else {
+        const link = document.createElement("link");
+        link.rel = "icon";
+        link.href = svgUrl;
+        document.head.appendChild(link);
+      }
+    };
+
+    if (sunTimes && selectedLocation) {
+      const now = new Date();
+      const today = new Date();
+
+      // Only update favicon when viewing today's date
+      const viewingToday =
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate();
+
+      if (viewingToday) {
+        // Check which golden hour is next
+        const morningStart = sunTimes.goldenHourMorningStart;
+        const eveningStart = sunTimes.goldenHourEveningStart;
+
+        let nextIcon = "🌅"; // Default to sunrise
+
+        if (morningStart && eveningStart) {
+          if (now < morningStart) {
+            // Before morning golden hour - show sunrise
+            nextIcon = "🌅";
+          } else if (now < eveningStart) {
+            // Between morning and evening - show sunset
+            nextIcon = "🌇";
+          } else {
+            // After evening golden hour - show sunrise for tomorrow
+            nextIcon = "🌅";
+          }
+        }
+
+        updateFavicon(nextIcon);
+      } else {
+        // Not viewing today, default to sunrise
+        updateFavicon("🌅");
+      }
+    } else {
+      // No location selected, default to sunrise
+      updateFavicon("🌅");
+    }
+  }, [sunTimes, selectedLocation, date, currentTime]); // Update when any of these change
+
   // Fetch and process city data on initial load
   React.useEffect(() => {
     fetch("../cities.json")
