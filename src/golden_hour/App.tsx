@@ -542,18 +542,25 @@ const App: React.FC = () => {
   const [currentTime, setCurrentTime] = React.useState(new Date());
   const [showTestBanner, setShowTestBanner] = React.useState(false);
 
-  // Memoize dev mode check to avoid creating URLSearchParams on every render
-  const isDevMode = React.useMemo(() => {
-    return (
-      new URLSearchParams(window.location.search).get("dev") === "1" ||
-      window.location.hostname === "localhost"
-    );
-  }, []); // Empty dependency array since URL params don't change during component lifecycle
+  const isDevMode =
+    new URLSearchParams(window.location.search).get("dev") === "1" ||
+    window.location.hostname === "localhost";
 
-  // Memoize today's date string to avoid creating new Date() objects on every render
-  const todayDateString = React.useMemo(() => {
-    return new Date().toDateString();
-  }, []); // Empty dependency array since we want today's date fixed for the component lifecycle
+  // Keep today's date string updated at midnight
+  const [todayDateString, setTodayDateString] = React.useState(() =>
+    new Date().toDateString()
+  );
+  React.useEffect(() => {
+    // Calculate milliseconds until next midnight
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+    const timeout = setTimeout(() => {
+      setTodayDateString(new Date().toDateString());
+    }, msUntilMidnight);
+    return () => clearTimeout(timeout);
+  }, [todayDateString]);
 
   // Update current time every minute for countdown
   React.useEffect(() => {
