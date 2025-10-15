@@ -540,7 +540,20 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
   const [currentTime, setCurrentTime] = React.useState(new Date());
-  const [showTestBanner, setShowTestBanner] = React.useState<boolean>(false);
+  const [showTestBanner, setShowTestBanner] = React.useState(false);
+
+  // Memoize dev mode check to avoid creating URLSearchParams on every render
+  const isDevMode = React.useMemo(() => {
+    return (
+      new URLSearchParams(window.location.search).get("dev") === "1" ||
+      window.location.hostname === "localhost"
+    );
+  }, []); // Empty dependency array since URL params don't change during component lifecycle
+
+  // Memoize today's date string to avoid creating new Date() objects on every render
+  const todayDateString = React.useMemo(() => {
+    return new Date().toDateString();
+  }, []); // Empty dependency array since we want today's date fixed for the component lifecycle
 
   // Update current time every minute for countdown
   React.useEffect(() => {
@@ -882,8 +895,7 @@ const App: React.FC = () => {
               {/* Invisible spacer to match the Today button space */}
               <div
                 className={`mt-2 ${
-                  selectedLocation &&
-                  date.toDateString() !== new Date().toDateString()
+                  selectedLocation && date.toDateString() !== todayDateString
                     ? "h-8"
                     : "h-0"
                 }`}
@@ -939,7 +951,7 @@ const App: React.FC = () => {
                   }}
                   disabled={!selectedLocation}
                 >
-                  {date.toDateString() === new Date().toDateString()
+                  {date.toDateString() === todayDateString
                     ? "Today"
                     : date.toLocaleDateString("en-US", {
                         weekday: "short",
@@ -985,14 +997,13 @@ const App: React.FC = () => {
               {/* Today button container - conditional height */}
               <div
                 className={`mt-2 flex items-center ${
-                  selectedLocation &&
-                  date.toDateString() !== new Date().toDateString()
+                  selectedLocation && date.toDateString() !== todayDateString
                     ? "h-8"
                     : "h-0"
                 }`}
               >
                 {selectedLocation &&
-                  date.toDateString() !== new Date().toDateString() && (
+                  date.toDateString() !== todayDateString && (
                     <button
                       type="button"
                       className="w-full px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1093,8 +1104,7 @@ const App: React.FC = () => {
           <div className="flex items-center justify-center gap-4">
             <p>Powered by SunCalc.js</p>
             {/* Dev Mode Button - Dev only (enable by adding ?dev=1 to URL) */}
-            {(new URLSearchParams(window.location.search).get("dev") === "1" ||
-              window.location.hostname === "localhost") && (
+            {isDevMode && (
               <button
                 className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-400 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 onClick={() => setShowTestBanner(!showTestBanner)}
