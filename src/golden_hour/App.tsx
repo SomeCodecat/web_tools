@@ -546,6 +546,92 @@ const App: React.FC = () => {
     new URLSearchParams(window.location.search).get("dev") === "1" ||
     window.location.hostname === "localhost";
 
+  // Parse URL parameters for initial state
+  const parseUrlParameters = React.useCallback(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // Parse date parameter (supports YYYY-MM-DD, "today", "today+n", or "today-n")
+    const parseDate = (dateParam: string | null): Date => {
+      if (!dateParam) return new Date();
+
+      if (dateParam === "today") {
+        return new Date();
+      }
+
+      // Handle relative dates like "today+1", "today-1", etc.
+      if (dateParam.startsWith("today")) {
+        const today = new Date();
+        const match = dateParam.match(/^today([+-]\d+)$/);
+        if (match) {
+          const offset = parseInt(match[1], 10);
+          const resultDate = new Date(today);
+          resultDate.setDate(today.getDate() + offset);
+          return resultDate;
+        }
+        return today; // Just "today" or invalid format
+      }
+
+      // Handle absolute dates in YYYY-MM-DD format
+      const absoluteDate = new Date(dateParam);
+      if (!isNaN(absoluteDate.getTime())) {
+        return absoluteDate;
+      }
+
+      // Fallback to today if parsing fails
+      return new Date();
+    };
+
+    return {
+      place: urlParams.get("place"), // Format: "CityName,Timezone" or just "CityName"
+      date: parseDate(urlParams.get("date")),
+    };
+  }, []);
+
+  // Update URL parameters when location or date changes
+  const updateUrlParameters = React.useCallback(
+    (newLocation?: CityInfo | null, newDate?: Date) => {
+      const url = new URL(window.location.href);
+      const params = new URLSearchParams(url.search);
+
+      // Update place parameter with city name and timezone to handle duplicates
+      if (newLocation) {
+        // Use format: "CityName,Timezone" for uniqueness
+        params.set("place", `${newLocation.city.name},${newLocation.tz}`);
+      } else if (newLocation === null) {
+        params.delete("place");
+      }
+
+      // Update date parameter (use absolute format or "today")
+      if (newDate) {
+        const today = new Date();
+        const targetDate = new Date(newDate);
+
+        // Check if it's today
+        const isToday =
+          targetDate.getFullYear() === today.getFullYear() &&
+          targetDate.getMonth() === today.getMonth() &&
+          targetDate.getDate() === today.getDate();
+
+        if (isToday) {
+          params.set("date", "today");
+        } else {
+          // Use YYYY-MM-DD format for absolute dates
+          const year = targetDate.getFullYear();
+          const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+          const day = String(targetDate.getDate()).padStart(2, "0");
+          params.set("date", `${year}-${month}-${day}`);
+        }
+      }
+
+      // Update URL without page reload
+      const newUrl = `${url.pathname}${
+        params.toString() ? "?" + params.toString() : ""
+      }`;
+      window.history.replaceState({}, "", newUrl);
+    },
+    []
+  );
+
   // Keep today's date string updated at midnight
   const [todayDateString, setTodayDateString] = React.useState(() =>
     new Date().toDateString()
@@ -649,18 +735,58 @@ const App: React.FC = () => {
         );
         setCities(allCities);
 
-        // Try to restore last saved city
-        const lastCity = getLastCity();
-        if (lastCity) {
-          // Find the city in the loaded cities to ensure it still exists
-          const foundCity = allCities.find(
-            (cityInfo) =>
-              cityInfo.city.name === lastCity.city.name &&
-              cityInfo.tz === lastCity.tz
-          );
-          if (foundCity) {
-            setSelectedLocation(foundCity);
+        // Parse URL parameters for initial state
+        const urlParams = parseUrlParameters();
+
+        // Set initial date from URL params
+        if (urlParams.date) {
+          setDate(urlParams.date);
+        }
+
+        // Try to find city from URL params first, then fallback to saved city
+        let initialCity: CityInfo | null = null;
+
+        if (urlParams.place) {
+          // Check if place parameter includes timezone (format: "CityName,Timezone")
+          if (urlParams.place.includes(",")) {
+            const [cityName, timezone] = urlParams.place.split(",", 2);
+            // Exact match by city name and timezone
+            initialCity =
+              allCities.find(
+                (cityInfo) =>
+                  cityInfo.city.name === cityName && cityInfo.tz === timezone
+              ) || null;
+          } else {
+            // Fallback: search by city name only (first match)
+            const searchTerm = urlParams.place.toLowerCase();
+            initialCity =
+              allCities.find(
+                (cityInfo) => cityInfo.city.name.toLowerCase() === searchTerm
+              ) || null;
           }
+        }
+
+        // If no URL city found, try to restore last saved city
+        if (!initialCity) {
+          const lastCity = getLastCity();
+          if (lastCity) {
+            // Find the city in the loaded cities to ensure it still exists
+            const cachedCity =
+              allCities.find(
+                (cityInfo) =>
+                  cityInfo.city.name === lastCity.city.name &&
+                  cityInfo.tz === lastCity.tz
+              ) || null;
+
+            if (cachedCity) {
+              setSelectedLocation(cachedCity);
+              // Update URL since this came from cache, not URL parameters
+              updateUrlParameters(cachedCity, urlParams.date || new Date());
+            }
+          }
+        } else {
+          // City came from URL parameters, just set it without updating URL
+          setSelectedLocation(initialCity);
         }
 
         setIsLoading(false);
@@ -796,12 +922,28 @@ const App: React.FC = () => {
   const handleLocationSelect = (location: CityInfo) => {
     setSelectedLocation(location);
     saveLastCity(location);
+    updateUrlParameters(location, date);
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const [year, month, day] = e.target.value.split("-").map(Number);
     const newDate = new Date(year, month - 1, day);
     setDate(newDate);
+    updateUrlParameters(selectedLocation, newDate);
+  };
+
+  // Helper to update both date state and URL
+  const updateDate = (newDate: Date | ((prev: Date) => Date)) => {
+    if (typeof newDate === "function") {
+      setDate((prev) => {
+        const result = newDate(prev);
+        updateUrlParameters(selectedLocation, result);
+        return result;
+      });
+    } else {
+      setDate(newDate);
+      updateUrlParameters(selectedLocation, newDate);
+    }
   };
 
   const formatDateForInput = (d: Date) => {
@@ -849,36 +991,6 @@ const App: React.FC = () => {
           </p>
         </header>
 
-        <div className="flex justify-center mb-6">
-          <div className="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2">
-            <span className="text-slate-300 font-medium">
-              Golden Hour Mode:
-            </span>
-            <button
-              className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
-                mode === "plusminus6"
-                  ? "bg-yellow-500 text-slate-900"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-              onClick={() => setMode("plusminus6")}
-              aria-pressed={mode === "plusminus6"}
-            >
-              ±6°
-            </button>
-            <button
-              className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
-                mode === "suncalc"
-                  ? "bg-yellow-500 text-slate-900"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-              onClick={() => setMode("suncalc")}
-              aria-pressed={mode === "suncalc"}
-            >
-              SunCalc
-            </button>
-          </div>
-        </div>
-
         <main className="max-w-3xl mx-auto">
           <div className="flex flex-col md:flex-row gap-6 mb-8 md:items-end">
             {/* Location Selector (left) */}
@@ -917,6 +1029,7 @@ const App: React.FC = () => {
                           if (closestCity) {
                             setSelectedLocation(closestCity);
                             saveLastCity(closestCity);
+                            updateUrlParameters(closestCity, date);
                           } else {
                             alert("No city found near your location.");
                           }
@@ -984,7 +1097,7 @@ const App: React.FC = () => {
                   type="button"
                   className="p-2 rounded-full hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   onClick={() =>
-                    setDate(
+                    updateDate(
                       (prev) => new Date(prev.getTime() - 24 * 60 * 60 * 1000)
                     )
                   }
@@ -1031,7 +1144,7 @@ const App: React.FC = () => {
                   type="button"
                   className="p-2 rounded-full hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   onClick={() =>
-                    setDate(
+                    updateDate(
                       (prev) => new Date(prev.getTime() + 24 * 60 * 60 * 1000)
                     )
                   }
@@ -1075,7 +1188,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       className="w-full px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      onClick={() => setDate(new Date())}
+                      onClick={() => updateDate(new Date())}
                       title="Go to today"
                     >
                       Today
@@ -1092,7 +1205,36 @@ const App: React.FC = () => {
           )}
 
           {sunTimes && selectedLocation && (
-            <div className="card-bg p-6 sm:p-8 rounded-2xl shadow-2xl">
+            <div className="card-bg p-6 sm:p-8 rounded-2xl shadow-2xl relative">
+              {/* Mode toggle in top-right corner */}
+              <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+                <div className="inline-flex items-center gap-1 bg-slate-700/50 border border-slate-600 rounded-lg px-2 py-1">
+                  <button
+                    className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
+                      mode === "plusminus6"
+                        ? "bg-yellow-500 text-slate-900"
+                        : "bg-slate-600 text-slate-300 hover:bg-slate-500"
+                    }`}
+                    onClick={() => setMode("plusminus6")}
+                    aria-pressed={mode === "plusminus6"}
+                    title="Sun between -6° and +6° altitude"
+                  >
+                    ±6°
+                  </button>
+                  <button
+                    className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
+                      mode === "suncalc"
+                        ? "bg-yellow-500 text-slate-900"
+                        : "bg-slate-600 text-slate-300 hover:bg-slate-500"
+                    }`}
+                    onClick={() => setMode("suncalc")}
+                    aria-pressed={mode === "suncalc"}
+                    title="SunCalc.js built-in algorithm"
+                  >
+                    SunCalc
+                  </button>
+                </div>
+              </div>
               <div className="text-center mb-6">
                 <h2 className="text-2xl font-bold text-white">
                   {selectedLocation.city.name}
@@ -1105,10 +1247,8 @@ const App: React.FC = () => {
                     day: "numeric",
                   })}
                 </p>
-              </div>
-
+              </div>{" "}
               <GoldenHourBanner sunTimes={sunTimes} showTest={showTestBanner} />
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ResultCard
                   icon="🌅"
@@ -1163,7 +1303,6 @@ const App: React.FC = () => {
                   style={{ animationDelay: "0.4s" }}
                 />
               </div>
-
               <DaylightVisual sunTimes={sunTimes} />
             </div>
           )}
