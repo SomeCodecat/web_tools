@@ -203,6 +203,7 @@ interface TimezoneCardProps {
 
 const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
   ({ selectedTz, isOwnPanel, ownTimezone, currentTime, onDelete }) => {
+    const [fullscreen, setFullscreen] = useState(false);
     const { tz, city, lat, lon, id } = selectedTz;
     const color = useMemo(() => generateColor(id), [id]);
 
@@ -279,60 +280,227 @@ const TimezoneCard: React.FC<TimezoneCardProps> = React.memo(
     const panelBg = isOwnPanel ? "bg-gray-800" : "bg-gray-800";
 
     return (
-      <div
-        className={`flex flex-col md:flex-row items-start md:items-center justify-between w-full ${panelBg} p-4 rounded-xl gap-4 md:gap-6 border-l-4`}
-        style={{ borderColor: isOwnPanel ? "#06b6d4" : color }}
-      >
-        <div className="w-full md:w-56 flex-shrink-0">
-          <div className="flex justify-between items-start md:block">
-            <div>
-              <h2 className="text-xl font-bold text-white truncate">
-                {city.replace(/_/g, " ")}
-              </h2>
-              <p className="text-xs text-gray-400 truncate">
-                {tz.replace(/_/g, " ")}
-              </p>
-            </div>
-            <div className="text-right md:text-left">
-              <p className="text-3xl font-mono text-slate-100 md:mt-1">
-                {cardData.timeString}
-              </p>
-              <p className="text-sm text-gray-300">{cardData.dateString}</p>
+      <>
+        <div
+          className={`flex flex-col md:flex-row items-start md:items-center justify-between w-full ${panelBg} p-4 rounded-xl gap-4 md:gap-6 border-l-4`}
+          style={{ borderColor: isOwnPanel ? "#06b6d4" : color }}
+        >
+          <div className="w-full md:w-56 flex-shrink-0">
+            <div className="flex justify-between items-start md:block">
+              <div>
+                <h2 className="text-xl font-bold text-white truncate">
+                  {city.replace(/_/g, " ")}
+                </h2>
+                <p className="text-xs text-gray-400 truncate">
+                  {tz.replace(/_/g, " ")}
+                </p>
+              </div>
+              <div className="text-right md:text-left">
+                <p className="text-3xl font-mono text-slate-100 md:mt-1">
+                  {cardData.timeString}
+                </p>
+                <p className="text-sm text-gray-300">{cardData.dateString}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="w-full md:flex-grow flex items-center justify-center px-0 md:px-4 mb-8 md:mb-0">
-          <TimezoneVisual
-            timezone={tz}
-            coords={{ lat, lon }}
-            currentTime={currentTime}
-            color={isOwnPanel ? "#06b6d4" : color}
-          />
-        </div>
+          <div className="w-full md:flex-grow flex items-center justify-center px-0 md:px-4 mb-8 md:mb-0">
+            <TimezoneVisual
+              timezone={tz}
+              coords={{ lat, lon }}
+              currentTime={currentTime}
+              color={isOwnPanel ? "#06b6d4" : color}
+            />
+          </div>
 
-        <div className="w-full md:w-48 flex-shrink-0 text-left md:text-right">
-          {isOwnPanel ? (
-            <span className="text-lg font-semibold text-cyan-300">
-              {cardData.timeZoneName}
-            </span>
-          ) : (
-            <div className="flex justify-between items-center w-full">
-              <p className="text-lg font-medium" style={{ color }}>
-                {cardData.offsetString}
-              </p>
-              {onDelete && (
+          <div className="w-full md:w-48 flex-shrink-0 flex flex-col md:items-end gap-2">
+            {/* Desktop action buttons (md and up) */}
+            <div className="hidden md:flex flex-row gap-2 mb-2 md:justify-end justify-start">
+              {!isOwnPanel && onDelete && (
                 <button
                   onClick={() => onDelete(id)}
-                  className="text-gray-500 hover:text-red-500 font-bold text-sm transition-colors"
+                  className="text-red-500 hover:text-white font-bold text-sm transition-colors border border-red-700 rounded-full p-2 flex items-center justify-center"
+                  title="Remove City"
+                  aria-label="Remove"
                 >
-                  REMOVE
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.257 3.099c.366-.446.958-.599 1.493-.599.535 0 1.127.153 1.493.599l.263.32h3.494a1 1 0 110 2h-.217l-.772 10.06A2 2 0 0112.02 17H7.98a2 2 0 01-1.991-1.521L5.217 5.42h-.217a1 1 0 110-2h3.494l.263-.32zM7.98 15h4.04l.75-9.78H7.23L7.98 15zm2.02-7a1 1 0 10-2 0v5a1 1 0 102 0V8z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </button>
               )}
+              <button
+                onClick={() => setFullscreen(true)}
+                className="text-cyan-400 hover:text-white font-bold text-sm transition-colors border border-cyan-700 rounded-full p-2 flex items-center justify-center"
+                title="Fullscreen Clock"
+                aria-label="Fullscreen"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 3H5a2 2 0 00-2 2v3m0 8v3a2 2 0 002 2h3m8-16h3a2 2 0 012 2v3m0 8v3a2 2 0 01-2 2h-3"
+                  />
+                </svg>
+              </button>
             </div>
-          )}
+            {isOwnPanel ? (
+              <>
+                <span className="text-lg font-semibold text-cyan-300 hidden md:inline">
+                  {cardData.timeZoneName}
+                </span>
+                {/* Mobile: show fullscreen button in row */}
+                <div className="flex md:hidden w-full items-center justify-between">
+                  <span className="text-lg font-semibold text-cyan-300">
+                    {cardData.timeZoneName}
+                  </span>
+                  <div className="flex flex-row gap-2">
+                    <button
+                      onClick={() => setFullscreen(true)}
+                      className="text-cyan-400 hover:text-white font-bold text-sm transition-colors border border-cyan-700 rounded-full p-2 flex items-center justify-center"
+                      title="Fullscreen Clock"
+                      aria-label="Fullscreen"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-5 h-5"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 3H5a2 2 0 00-2 2v3m0 8v3a2 2 0 002 2h3m8-16h3a2 2 0 012 2v3m0 8v3a2 2 0 01-2 2h-3"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Desktop: offset right, buttons above; Mobile: offset and buttons in same row */}
+                <div className="hidden md:flex w-full">
+                  <div className="flex-grow"></div>
+                  <p
+                    className="text-lg font-medium text-right"
+                    style={{ color }}
+                  >
+                    {cardData.offsetString}
+                  </p>
+                </div>
+                <div className="flex md:hidden w-full items-center justify-between">
+                  <p className="text-lg font-medium" style={{ color }}>
+                    {cardData.offsetString}
+                  </p>
+                  <div className="flex flex-row gap-2">
+                    {onDelete && (
+                      <button
+                        onClick={() => onDelete(id)}
+                        className="text-red-500 hover:text-white font-bold text-sm transition-colors border border-red-700 rounded-full p-2 flex items-center justify-center"
+                        title="Remove City"
+                        aria-label="Remove"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className="w-5 h-5"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M8.257 3.099c.366-.446.958-.599 1.493-.599.535 0 1.127.153 1.493.599l.263.32h3.494a1 1 0 110 2h-.217l-.772 10.06A2 2 0 0112.02 17H7.98a2 2 0 01-1.991-1.521L5.217 5.42h-.217a1 1 0 110-2h3.494l.263-.32zM7.98 15h4.04l.75-9.78H7.23L7.98 15zm2.02-7a1 1 0 10-2 0v5a1 1 0 102 0V8z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setFullscreen(true)}
+                      className="text-cyan-400 hover:text-white font-bold text-sm transition-colors border border-cyan-700 rounded-full p-2 flex items-center justify-center"
+                      title="Fullscreen Clock"
+                      aria-label="Fullscreen"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-5 h-5"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 3H5a2 2 0 00-2 2v3m0 8v3a2 2 0 002 2h3m8-16h3a2 2 0 012 2v3m0 8v3a2 2 0 01-2 2h-3"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+        {fullscreen && (
+          <div
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-800"
+            style={{ animation: "fadeIn 0.2s" }}
+          >
+            <button
+              onClick={() => setFullscreen(false)}
+              className="absolute top-6 right-8 text-4xl text-gray-400 hover:text-white font-bold focus:outline-none"
+              title="Close Fullscreen"
+            >
+              &times;
+            </button>
+            <div className="flex flex-col items-center justify-center w-full">
+              <h2 className="text-4xl md:text-6xl font-bold text-white mb-2 text-center">
+                {city.replace(/_/g, " ")}
+              </h2>
+              <p className="text-lg md:text-2xl text-gray-400 mb-8 text-center">
+                {tz.replace(/_/g, " ")}
+              </p>
+              <div className="flex flex-col items-center justify-center mb-8">
+                <span className="text-[7vw] md:text-[5vw] font-mono text-yellow-200 drop-shadow-lg">
+                  {cardData.timeString}
+                </span>
+                <span className="text-2xl md:text-3xl text-gray-300 mt-2">
+                  {cardData.dateString}
+                </span>
+                <span className="text-xl md:text-2xl text-cyan-300 mt-4">
+                  {cardData.timeZoneName}
+                </span>
+              </div>
+              <div className="w-[80vw] max-w-6xl">
+                <TimezoneVisual
+                  timezone={tz}
+                  coords={{ lat, lon }}
+                  currentTime={currentTime}
+                  color={isOwnPanel ? "#06b6d4" : color}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 );
