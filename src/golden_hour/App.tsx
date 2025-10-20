@@ -507,6 +507,7 @@ const GoldenHourBanner: React.FC<{
 // --- Helper Functions for LocalStorage ---
 
 const STORAGE_KEY = "golden-hour-last-city";
+const MODE_STORAGE_KEY = "golden-hour-mode";
 
 const saveLastCity = (cityInfo: CityInfo) => {
   try {
@@ -526,6 +527,27 @@ const getLastCity = (): CityInfo | null => {
   }
 };
 
+const saveLastMode = (mode: "plusminus6" | "suncalc") => {
+  try {
+    localStorage.setItem(MODE_STORAGE_KEY, mode);
+  } catch (error) {
+    console.warn("Failed to save mode to localStorage:", error);
+  }
+};
+
+const getLastMode = (): "plusminus6" | "suncalc" => {
+  try {
+    const saved = localStorage.getItem(MODE_STORAGE_KEY) as
+      | "plusminus6"
+      | "suncalc"
+      | null;
+    return saved || "plusminus6"; // Default to plusminus6 if not found
+  } catch (error) {
+    console.warn("Failed to load mode from localStorage:", error);
+    return "plusminus6";
+  }
+};
+
 // --- Main App Component ---
 
 const App: React.FC = () => {
@@ -534,7 +556,7 @@ const App: React.FC = () => {
     React.useState<CityInfo | null>(null);
   const [date, setDate] = React.useState<Date>(new Date());
   const [mode, setMode] = React.useState<"plusminus6" | "suncalc">(
-    "plusminus6"
+    getLastMode()
   );
   const [sunTimes, setSunTimes] = React.useState<ExtendedSunTimes | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
@@ -559,11 +581,17 @@ const App: React.FC = () => {
       }
 
       // Handle relative dates like "today+1", "today-1", etc.
+      // Note: URLSearchParams converts '+' to space, so we need to handle both formats
       if (dateParam.startsWith("today")) {
         const today = new Date();
-        const match = dateParam.match(/^today([+-]\d+)$/);
+        // Handle "today+1", "today-1" formats (note: '+' is decoded to space by URLSearchParams)
+        const match = dateParam.match(/^today([\s+-]?)(\d+)$/);
         if (match) {
-          const offset = parseInt(match[1], 10);
+          const sign = match[1];
+          const number = parseInt(match[2], 10);
+          // If there's a space or no sign, treat as positive (since + becomes space in URL)
+          // If there's a minus sign, treat as negative
+          const offset = sign === "-" ? -number : number;
           const resultDate = new Date(today);
           resultDate.setDate(today.getDate() + offset);
           return resultDate;
@@ -925,6 +953,11 @@ const App: React.FC = () => {
     updateUrlParameters(location, date);
   };
 
+  const handleModeChange = (newMode: "plusminus6" | "suncalc") => {
+    setMode(newMode);
+    saveLastMode(newMode);
+  };
+
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const [year, month, day] = e.target.value.split("-").map(Number);
     const newDate = new Date(year, month - 1, day);
@@ -1215,7 +1248,7 @@ const App: React.FC = () => {
                         ? "bg-yellow-500 text-slate-900"
                         : "bg-slate-600 text-slate-300 hover:bg-slate-500"
                     }`}
-                    onClick={() => setMode("plusminus6")}
+                    onClick={() => handleModeChange("plusminus6")}
                     aria-pressed={mode === "plusminus6"}
                     title="Sun between -6° and +6° altitude"
                   >
@@ -1227,7 +1260,7 @@ const App: React.FC = () => {
                         ? "bg-yellow-500 text-slate-900"
                         : "bg-slate-600 text-slate-300 hover:bg-slate-500"
                     }`}
-                    onClick={() => setMode("suncalc")}
+                    onClick={() => handleModeChange("suncalc")}
                     aria-pressed={mode === "suncalc"}
                     title="SunCalc.js built-in algorithm"
                   >
