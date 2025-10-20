@@ -31,6 +31,20 @@ for d in src/*/; do
       if [ -f "${d}index.html" ]; then
         cp "${d}index.html" "public/$name/index.html"
       fi
+      
+      # Copy PWA files
+      if [ -f "${d}manifest.json" ]; then
+        cp "${d}manifest.json" "public/$name/manifest.json"
+      fi
+      if [ -f "${d}sw.js" ]; then
+        cp "${d}sw.js" "public/$name/sw.js"
+      fi
+      if [ -f "${d}icon-192x192.png" ]; then
+        cp "${d}icon-192x192.png" "public/$name/icon-192x192.png"
+      fi
+      if [ -f "${d}icon-512x512.png" ]; then
+        cp "${d}icon-512x512.png" "public/$name/icon-512x512.png"
+      fi
     fi
 done
 

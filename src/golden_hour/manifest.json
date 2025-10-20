@@ -1,0 +1,42 @@
+{
+  "name": "Golden Hour Calculator",
+  "short_name": "Golden Hour",
+  "description": "Calculate golden hour times for photography and outdoor activities worldwide",
+  "start_url": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "scope": "./",
+  "lang": "en",
+  "categories": ["photography", "utilities", "lifestyle"],
+  "id": "golden-hour-calculator",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
