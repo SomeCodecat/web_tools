@@ -1,6 +1,7 @@
 import React from "react";
 import SunCalc from "suncalc";
 import { List, RowComponentProps } from "react-window";
+import Fuse from "fuse.js";
 
 // --- Types ---
 interface City {
@@ -96,15 +97,128 @@ const SearchableSelect: React.FC<
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
 
+  // Helper function to parse timezone fields consistently
+  const parseTimezoneFields = (tz: string, toLowerCase: boolean = false) => {
+    const parts = tz.split("/");
+    const region = parts[0] || "";
+    const location = parts.slice(1).join("/");
+    const regionParsed = region.replace(/_/g, " ");
+    const locationParsed = location.replace(/_/g, " ");
+    const timezoneParsed = tz.replace(/_/g, " ");
+
+    return toLowerCase
+      ? {
+          region: regionParsed.toLowerCase(),
+          location: locationParsed.toLowerCase(),
+          timezone: timezoneParsed.toLowerCase(),
+        }
+      : {
+          region: regionParsed,
+          location: locationParsed,
+          timezone: timezoneParsed,
+        };
+  };
+
+  // Configure Fuse.js for sophisticated fuzzy search
+  const fuse = React.useMemo(() => {
+    // Prepare data with searchable fields
+    const searchableData = options.map((item) => ({
+      ...item,
+      cityName: item.city.name,
+      ...parseTimezoneFields(item.tz),
+    }));
+
+    return new Fuse(searchableData, {
+      keys: [
+        {
+          name: "cityName",
+          weight: 0.7,
+        },
+        {
+          name: "region",
+          weight: 0.5,
+        },
+        {
+          name: "location",
+          weight: 0.6,
+        },
+        {
+          name: "timezone",
+          weight: 0.4,
+        },
+      ],
+      threshold: 0.4, // Lower = more strict, higher = more fuzzy
+      includeScore: true,
+      shouldSort: true,
+      findAllMatches: false,
+      minMatchCharLength: 1,
+      location: 0,
+      distance: 100,
+    });
+  }, [options]);
+
   const filteredOptions = React.useMemo(() => {
-    if (!debouncedSearchTerm) return options;
-    const lowerCaseSearch = debouncedSearchTerm.toLowerCase();
-    return options.filter(
-      (cityInfo) =>
-        cityInfo.city.name.toLowerCase().includes(lowerCaseSearch) ||
-        cityInfo.tz.toLowerCase().replace(/_/g, " ").includes(lowerCaseSearch)
-    );
-  }, [options, debouncedSearchTerm]);
+    const trimmed = debouncedSearchTerm.trim();
+    if (!trimmed) return options;
+
+    const searchTerms = trimmed.toLowerCase().split(/\s+/);
+
+    if (searchTerms.length === 1) {
+      // Single term - use fuse.js
+      const results = fuse.search(debouncedSearchTerm);
+      return results.slice(0, 100).map((result) => result.item);
+    }
+
+    // Multi-term search - each term must match something
+    const candidates = options.map((item) => ({
+      item,
+      cityName: item.city.name.toLowerCase(),
+      ...parseTimezoneFields(item.tz, true),
+    }));
+
+    const matchingItems = candidates.filter((candidate) => {
+      // Every search term must match at least one field
+      return searchTerms.every((term) => {
+        return (
+          candidate.cityName.includes(term) ||
+          candidate.region.includes(term) ||
+          candidate.location.includes(term) ||
+          candidate.timezone.includes(term)
+        );
+      });
+    });
+
+    // Score and sort results
+    const scoredResults = matchingItems.map((candidate) => {
+      let score = 0;
+
+      searchTerms.forEach((term) => {
+        // Score each term by match quality:
+        // - Exact city name match: 100 (highest priority)
+        // - City name starts with term: 50
+        // - City name contains term: 25
+        // - Location match: 20
+        // - Region match: 15
+        // - Timezone match: 10 (lowest priority)
+        if (candidate.cityName === term) score += 100;
+        else if (candidate.cityName.startsWith(term)) score += 50;
+        else if (candidate.cityName.includes(term)) score += 25;
+        else if (candidate.location.includes(term)) score += 20;
+        else if (candidate.region.includes(term)) score += 15;
+        else if (candidate.timezone.includes(term)) score += 10;
+      });
+
+      return { item: candidate.item, score };
+    });
+
+    return scoredResults
+      .sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score;
+        return a.item.city.name.localeCompare(b.item.city.name);
+      })
+      .slice(0, 100)
+      .map((result) => result.item);
+  }, [options, debouncedSearchTerm, fuse]);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -129,6 +243,7 @@ const SearchableSelect: React.FC<
 
   const Row = ({ index, style }: RowComponentProps) => {
     const { tz, city } = filteredOptions[index];
+
     return (
       <div
         style={style}
@@ -138,7 +253,7 @@ const SearchableSelect: React.FC<
           setIsOpen(false);
         }}
       >
-        <div>
+        <div className="flex-1">
           <p className="font-bold text-white">{city.name}</p>
           <p className="text-sm text-slate-400">{tz.replace(/_/g, " ")}</p>
         </div>
